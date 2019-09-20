@@ -1,0 +1,235 @@
+---
+title: "Unsupervised learning - clustering and dimension reduction homework"
+author: "Peter Stella"
+date: "Fall 2019"
+output:
+  html_document:
+    df_print: paged
+fontsize: 11pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = T)
+```
+
+# Lab Section
+Download auto data from the *Statistical Learning* book website here: http://www-bcf.usc.edu/~gareth/ISL/data.html
+
+Today, we are going over Hierarchical clustering, K-Means Clustering, PCA, and ICA. 
+
+```{r load, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(ggfortify)
+library(fastICA)
+library(factoextra)
+library(dplyr)
+library(cluster)
+```
+
+```{r}
+#install.packages("Rtools")
+#install.packages("factoextra")
+
+```
+
+
+## Homework
+
+```{r}
+data(iris)
+```
+
+0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
+
+```{r}
+iris2 <- iris[,1:4]
+```
+
+1. Write out the Kmeans algorithm by hand, and run two iterations of it. 
+
+1. Set k and randomly assign data points to to K groups
+
+```{r}
+iris2$cluster1 <- sample.int(3, size= nrow(iris2), replace = TRUE)
+```
+
+3. Compute centroid for each K
+
+```{r}
+cl1_avgs <- iris2 %>% group_by(cluster1) %>% summarize(Sepal.Length = mean(Sepal.Length), Sepal.Width = mean(Sepal.Width), Petal.Length= mean(Petal.Length), Petal.Width = mean(Petal.Width))
+```
+
+4. Compute distance to each centroid for each data point
+
+```{r}
+iris3 <- rbind(cl1_avgs, iris2)
+iris4 <- iris3[,2:5]
+iris_dist <- as.matrix(dist(iris4, method = "euclidean"))
+iris_dist <- as.data.frame(iris_dist[4:153,1:3])
+```
+
+5.Identify nearest centroids
+
+```{r}
+iris_dist$cluster2 <- max.col(-iris_dist)
+
+```
+
+6. Attach to dataset
+```{r}
+iris2$cluster2 <- iris_dist$cluster2
+```
+
+7. Calculate new centroid locations based on new clustering
+
+```{r}
+cl2_avgs <- iris2 %>% group_by(cluster2) %>% summarize(Sepal.Length = mean(Sepal.Length), Sepal.Width = mean(Sepal.Width), Petal.Length= mean(Petal.Length), Petal.Width = mean(Petal.Width))
+
+```
+
+8. Compute distance to each second centroid for each data point
+
+```{r}
+cl2_avgs <- cl2_avgs[,2:5]
+iris5 <- iris2[,1:4]
+iris5 <- rbind(cl2_avgs,iris5)
+iris_dist2 <- as.matrix(dist(iris5, method = "euclidean"))
+iris_dist2 <- as.data.frame(iris_dist2[4:153,1:3])
+```
+
+Identify nearest centroids
+
+```{r}
+iris_dist2$cluster3 <- max.col(-iris_dist2)
+
+```
+
+Attach to dataset
+```{r}
+iris2$cluster3 <- iris_dist2$cluster3
+```
+
+
+2. Run PCA on the Iris dataset. Plot a scatter plot of PC1 vs PC2 and include the percent variance those PCs describe. 
+
+
+```{r}
+iris_pca <- data.matrix(iris)
+autoplot(prcomp(iris_pca))
+```
+
+
+
+3. Run ICA on the Iris dataset. Plot the independent components as a heatmap.
+
+```{r}
+a <- fastICA(iris_pca, 7, alg.typ = "parallel", fun = "logcosh", alpha = 1,
+             method = "R", row.norm = FALSE, maxit = 200,
+             tol = 0.0001, verbose = TRUE)
+```
+
+plot the independent components as a heatmap
+```{r}
+heatmap(a$S)
+```
+4. Use Kmeans to cluster the Iris data. 
+* Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species?
+
+I cheated on this question. I was unable to figure out how to iterate over mutliple Ks automatically, so I used the package "factoextra" to build my average silhoette plot, which gives an optimal K of two, which does not map to species (3). 
+
+```{r}
+kmcluster3 <- kmeans(iris2, 3)
+dist3 <- daisy(iris2)
+plot(silhouette(kmcluster3$cluster, dist3, bordern=NA))
+sil3 <- silhouette(kmcluster3$cluster, dist3,)
+sil3avg <- mean(sil3[,3])
+sil3avg
+```
+
+```{r}
+fviz_nbclust(iris2, kmeans, method = "silhouette")
+```
+  
+  
+  * Using this clustering, color the PCA plot according to the clusters.
+  
+```{r}
+kmcluster2 <- kmeans(iris2, 2)
+pca_data <- prcomp(iris_pca)
+pca_data2 <- as.data.frame(pca_data$x)
+pca_data2$cluster <- kmcluster2$cluster
+ggplot(pca_data2,aes(x=PC1, y= PC2, color=cluster))+geom_point()
+```
+
+  
+  
+5. Use hierarchical clustering to cluster the Iris data.
+
+  * Try two different linkage types, and two different distance metrics. 
+  
+```{r}
+hierarchical_dist_iris <- dist(iris2, method = "euclidean")
+iris_tree_avg_euclidean <- hclust(hierarchical_dist_iris, method="average")
+
+hierarchical_dist_iris <- dist(iris2, method = "manhattan")
+iris_tree_avg_manhattan <- hclust(hierarchical_dist_iris, method="average")
+
+hierarchical_dist_iris <- dist(iris2, method = "euclidean")
+iris_tree_single_euclidean <- hclust(hierarchical_dist_iris, method="single")
+
+hierarchical_dist_iris <- dist(iris2, method = "manhattan")
+iris_tree_single_manhattan <- hclust(hierarchical_dist_iris, method="single")
+
+plot(iris_tree_avg_euclidean)
+plot(iris_tree_avg_manhattan)
+plot(iris_tree_single_euclidean)
+plot(iris_tree_single_manhattan)
+
+```
+  * For one linkage type and one distance metric, try two different cut points. 
+  * Using this clustering, color the PCA plot according to the clusters. (6  plots in total)
+  
+  
+```{r}
+
+iris_tree_avg_euclidean_k2 <- cutree(iris_tree_avg_euclidean, k = 2)
+iris_tree_avg_euclidean_k3 <- cutree(iris_tree_avg_euclidean, k = 3)
+plot(iris_tree_avg_euclidean)
+rect.hclust(iris_tree_avg_euclidean, k=3, h= NULL)
+rect.hclust(iris_tree_avg_euclidean, k=2, h= NULL)
+
+```
+  PCA plots colored by agglomerative clustering, will set height to one for all clusters to one to show differences
+```{r}
+iris_tree_avg_euclidean_h1 <- cutree(iris_tree_avg_euclidean,h=1)
+iris_tree_single_euclidean_h1 <- cutree(iris_tree_single_euclidean, h=1)
+iris_tree_avg_manhattan_h1 <- cutree(iris_tree_avg_manhattan,h=1)
+iris_tree_single_manhattan_h1 <- cutree(iris_tree_single_manhattan, h=1)
+
+pca_data2$avg_eucl <- iris_tree_avg_euclidean_h1
+pca_data2$sing_eucl <- iris_tree_single_euclidean_h1
+pca_data2$avg_man <- iris_tree_avg_manhattan_h1
+pca_data2$sing_man <- iris_tree_single_manhattan_h1
+
+ggplot(pca_data2,aes(x=PC1, y= PC2, color=avg_eucl))+geom_point()
+ggplot(pca_data2,aes(x=PC1, y= PC2, color=sing_eucl))+geom_point()
+ggplot(pca_data2,aes(x=PC1, y= PC2, color=avg_man))+geom_point()
+ggplot(pca_data2,aes(x=PC1, y= PC2, color=sing_man))+geom_point()
+
+```
+# Optional material
+On PCA:
+
+Eigen Vectors and Eigen Values http://www.visiondummy.com/2014/03/eigenvalues-eigenvectors/
+Linear Algebra by Prof. Gilbert Strang https://ocw.mit.edu/courses/mathematics/18-06-linear-algebra-spring-2010/video-lectures/
+http://www.cs.otago.ac.nz/cosc453/student_tutorials/principal_components.pdf
+https://stats.stackexchange.com/questions/2691/making-sense-of-principal-component-analysis-eigenvectors-eigenvalues
+
+On ICA: 
+
+Independent Component Analysis: Algorithms and Applications https://www.cs.helsinki.fi/u/ahyvarin/papers/NN00new.pdf
+Tutorial on ICA taken from http://rstudio-pubs-static.s3.amazonaws.com/93614_be30df613b2a4707b3e5a1a62f631d19.html
+
+
+
